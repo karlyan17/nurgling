@@ -3,11 +3,19 @@ package main
 import (
 	"fmt"
 	"net"
+	"io/ioutil"
 )
 
 func main() {
+	index, err := ioutil.ReadFile("index.html")
+	if err != nil {
+		fmt.Printf("error reading index.html:\n")
+		fmt.Print(err)
+	} else {
+		fmt.Printf("index.html read\n")
+	}
 	//start the Listener for tcp on port 7777
-	listen, err := net.Listen("tcp", ":7777")
+	listen, err := net.Listen("tcp", "0.0.0.0:7777")
 	if err != nil {
 		fmt.Printf("error connecting to socket:\n")
 		fmt.Print(err)
@@ -35,7 +43,8 @@ func main() {
 			fmt.Print(string(message))
 		}
 		//respond with message
-		nbytes, err = connect.Write([]byte("HTTP/1.1 200 OK\n\nSUCC"))
+		nbytes, err = connect.Write([]byte("HTTP/1.1 200 OK\n\n"))
+		nbytes, err = connect.Write(index)
 		if err != nil {
 			fmt.Printf("response error (%v bytes were written):\n", nbytes)
 			fmt.Print(err)
