@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"io/ioutil"
+	"strings"
 )
 
 
@@ -20,6 +21,41 @@ var port_listen string
 var err error
 var nurgling_workdir string
 
+// functions
+func parseHTTP(message_raw string) ([]string,map[string]string,string) {
+	// variables that will be returned
+	var http_request []string
+	var http_header_fields map[string]string
+	var message_body string
+
+	// variables that are garbage
+	var message_raw_split []string
+	var http_request_lines []string
+	var http_header_field_split []string
+
+	// split http header from message body and save body
+	message_raw_split = strings.Split(message_raw, "\r\n\r\n")
+	message_body = message_raw_split[1]
+
+	// split up the header in lines
+	http_request_lines = strings.Split(message_raw_split[0], "\r\n")
+
+	// go through the lines and 
+	// 1) isolate the http request line
+	// 2) make a map of the request header key/value pairs
+	http_header_fields = make(map[string]string)
+	for i,line := range(http_request_lines) {
+		if i == 0 {
+			// this is the actual meat, the http request line
+			http_request = strings.Split(line, " ")
+		} else {
+			http_header_field_split = strings.Split(line, ": ")
+			http_header_fields[http_header_field_split[0]] = http_header_field_split[1]
+		}
+	}
+
+	return http_request,http_header_fields,message_body
+}
 
 func main() {
 	// default options
@@ -51,7 +87,7 @@ func main() {
 			fmt.Printf("connection error:\n")
 			fmt.Print(err)
 		} else {
-			fmt.Printf("start listening\n")
+			fmt.Printf("started connection to %v\n", connect.RemoteAddr())
 		}
 		//read incomming request
 		message := make([]byte, 1024)
@@ -62,6 +98,7 @@ func main() {
 		} else {
 			fmt.Printf("read %v bytes:\n", nbytes)
 			fmt.Print(string(message))
+			parseHTTP(string(message))
 		}
 		//respond with message
 		nbytes, err = connect.Write([]byte("HTTP/1.1 200 OK\n\n"))
