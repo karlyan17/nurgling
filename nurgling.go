@@ -1,3 +1,10 @@
+// # TODO
+// 	- variables for options
+//	- config file for options
+//	- command line arguments
+//	- parse HTTP requests (only deliver on GET, otherwise respond with 405)
+//	- deliver custom files from workdir
+
 package main
 
 import (
@@ -6,8 +13,22 @@ import (
 	"io/ioutil"
 )
 
+
+//variables
+var addr_listen string
+var port_listen string
+var err error
+var nurgling_workdir string
+
+
 func main() {
-	index, err := ioutil.ReadFile("index.html")
+	// default options
+	addr_listen = "0.0.0.0"
+	port_listen = "7777"
+	nurgling_workdir = "/home/karlyan/go/src/nurgling"
+	//
+
+	index, err := ioutil.ReadFile(nurgling_workdir + "/" + "index.html")
 	if err != nil {
 		fmt.Printf("error reading index.html:\n")
 		fmt.Print(err)
@@ -15,7 +36,7 @@ func main() {
 		fmt.Printf("index.html read\n")
 	}
 	//start the Listener for tcp on port 7777
-	listen, err := net.Listen("tcp", "0.0.0.0:7777")
+	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
 	if err != nil {
 		fmt.Printf("error connecting to socket:\n")
 		fmt.Print(err)
