@@ -79,32 +79,32 @@ func handleHTTP(http_request httpRequest) []byte{
 	var response_head []byte
 	var response_body []byte
 
+	response_head = append(response_head, []byte("Server: nurgling/0.1\r\n")...)
+
 	switch request_method {
 	case "GET":
 		// GET request
 		if rune(request_resource[len(request_resource) - 1]) == '/' {
 			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
 			if err != nil {
-				fmt.Println("error reading " + nurgling_workdir + request_resource + "index.html :")
-				fmt.Println(err)
-				response_head = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
-				response_body = []byte("404 stop trying\r\n\r\n")
+				go fmt.Println("error reading " + nurgling_workdir + request_resource + "index.html :")
+				go fmt.Println(err)
+				response_head = append([]byte("HTTP/1.1 404 Not Found\r\n"), response_head...)
+				response_body = []byte("404 stop trying\r\n")
 			} else {
-				fmt.Println(nurgling_workdir + request_resource + "index.html read SUCCsesfully")
-				response_head = []byte("HTTP/1.1 200 OK\r\n")
-				response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
+				go fmt.Println(nurgling_workdir + request_resource + "index.html read SUCCsesfully")
+				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 			}
 		} else {
 			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource)
 			if err != nil {
-				fmt.Println("error reading " + nurgling_workdir + request_resource + " :")
-				fmt.Println(err)
-				response_head = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
-				response_body = []byte("404 stop trying\r\n\r\n")
+				go fmt.Println("error reading " + nurgling_workdir + request_resource + " :")
+				go fmt.Println(err)
+				response_head = append([]byte("HTTP/1.1 404 Not Found\r\n"), response_head...)
+				response_body = []byte("404 stop trying\r\n")
 			} else {
-				fmt.Println(nurgling_workdir + request_resource + " read SUCCesfully")
-				response_head = []byte("HTTP/1.1 200 OK\r\nAccept-Ranges: bytes\r\n")
-				response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
+				go fmt.Println(nurgling_workdir + request_resource + " read SUCCesfully")
+				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 			}
 		}
 	case "HEAD":
@@ -124,8 +124,8 @@ func handleHTTP(http_request httpRequest) []byte{
 	case "PATCH":
 		//PATCH request
 	}
+	response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
 	fmt.Println(string(response_head))
-	fmt.Println(response_head)
 	return append(response_head, response_body...)
 }
 func main() {
@@ -141,18 +141,18 @@ func main() {
 
 	//index, err := ioutil.ReadFile(nurgling_workdir + "/" + "index.html")
 	if err != nil {
-		fmt.Printf("error reading index.html:\n")
-		fmt.Print(err)
+		go fmt.Printf("error reading index.html:\n")
+		go fmt.Print(err)
 	} else {
-		fmt.Printf("index.html read\n")
+		go fmt.Printf("index.html read\n")
 	}
 	//start the Listener for tcp on port 7777
 	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
 	if err != nil {
-		fmt.Printf("error connecting to socket:\n")
-		fmt.Print(err)
+		go fmt.Printf("error connecting to socket:\n")
+		go fmt.Print(err)
 	} else {
-		fmt.Printf("Opened socket on port 7777 to listen on\n")
+		go fmt.Printf("Opened socket on port 7777 to listen on\n")
 	}
 	//begin infinite serving loop
 	for {
@@ -160,32 +160,31 @@ func main() {
 		connect, err := listen.Accept()
 		//////////////////////////////FORK HERE///////////////////////////////
 		if err != nil {
-			fmt.Printf("connection error:\n")
-			fmt.Print(err)
+			go fmt.Printf("connection error:\n")
+			go fmt.Print(err)
 		} else {
-			fmt.Printf("started connection to %v\n", connect.RemoteAddr())
+			go fmt.Printf("started connection to %v\n", connect.RemoteAddr())
 		}
 		//read incomming request
 		message := make([]byte, 1024)
 		nbytes, err :=connect.Read(message)
 		if err != nil {
-			fmt.Printf("reading error (%v bytes read):\n", nbytes)
-			fmt.Print(err)
+			go fmt.Printf("reading error (%v bytes read):\n", nbytes)
+			go fmt.Print(err)
 		} else {
-			fmt.Printf("read %v bytes:\n", nbytes)
-			fmt.Print(string(message))
+			go fmt.Printf("read %v bytes:\n", nbytes)
+			go fmt.Print(string(message))
 		}
 
 		//respond with message
-		fmt.Println(message)
 		http_request_parsed = parseHTTP(string(message))
 		http_response = handleHTTP(http_request_parsed)
 		nbytes, err = connect.Write(http_response)
 		if err != nil {
-			fmt.Printf("response error (%v bytes were written):\n", nbytes)
-			fmt.Print(err)
+			go fmt.Printf("response error (%v bytes were written):\n", nbytes)
+			go fmt.Print(err)
 		} else {
-			fmt.Printf("%v bytes written SUCCessfully\n", nbytes)
+			go fmt.Printf("%v bytes written SUCCessfully\n", nbytes)
 		}
 		//close connection
 		connect.Close()
