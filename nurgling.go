@@ -12,6 +12,7 @@ import (
 	"net"
 	"io/ioutil"
 	"strings"
+	"strconv"
 )
 
 
@@ -43,7 +44,9 @@ func parseHTTP(message_raw string) httpRequest {
 
 	// split http header from message body and save body
 	message_raw_split = strings.Split(message_raw, "\r\n\r\n")
-	message_body = message_raw_split[1]
+	if len(message_raw_split) > 1 {
+		message_body = message_raw_split[1]
+	}
 
 	// split up the header in lines
 	http_request_lines = strings.Split(message_raw_split[0], "\r\n")
@@ -69,37 +72,41 @@ func parseHTTP(message_raw string) httpRequest {
 	return parsed_request
 }
 
-func handleHTTP(http_request httpRequest) string{
+func handleHTTP(http_request httpRequest) []byte{
 	// variables
 	var request_method string = http_request.request[0]
 	var request_resource string = http_request.request[1]
-	var resource_bytes []byte
-	var response_head string
-	var response_body string
+	var response_head []byte
+	var response_body []byte
 
 	switch request_method {
 	case "GET":
 		// GET request
 		if rune(request_resource[len(request_resource) - 1]) == '/' {
-			resource_bytes, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
-			response_body = string(resource_bytes)
+			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
 			if err != nil {
 				fmt.Println("error reading " + nurgling_workdir + request_resource + "index.html :")
 				fmt.Println(err)
+				response_head = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+				response_body = []byte("404 stop trying\r\n\r\n")
 			} else {
 				fmt.Println(nurgling_workdir + request_resource + "index.html read SUCCsesfully")
+				response_head = []byte("HTTP/1.1 200 OK\r\n")
+				response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
 			}
 		} else {
-			resource_bytes, err = ioutil.ReadFile(nurgling_workdir + request_resource)
-			response_body = string(resource_bytes)
+			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource)
 			if err != nil {
 				fmt.Println("error reading " + nurgling_workdir + request_resource + " :")
 				fmt.Println(err)
+				response_head = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+				response_body = []byte("404 stop trying\r\n\r\n")
 			} else {
 				fmt.Println(nurgling_workdir + request_resource + " read SUCCesfully")
+				response_head = []byte("HTTP/1.1 200 OK\r\nAccept-Ranges: bytes\r\n")
+				response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
 			}
 		}
-		response_head = "HTTP/1.1 200 OK\n\r\n\r"
 	case "HEAD":
 		// HEAD request
 	case "POST":
@@ -117,11 +124,13 @@ func handleHTTP(http_request httpRequest) string{
 	case "PATCH":
 		//PATCH request
 	}
-	return response_head + response_body
+	fmt.Println(string(response_head))
+	fmt.Println(response_head)
+	return append(response_head, response_body...)
 }
 func main() {
 	// variables
-	var http_response string 
+	var http_response []byte
 	var http_request_parsed httpRequest
 
 	// default options
@@ -168,9 +177,10 @@ func main() {
 		}
 
 		//respond with message
+		fmt.Println(message)
 		http_request_parsed = parseHTTP(string(message))
 		http_response = handleHTTP(http_request_parsed)
-		nbytes, err = connect.Write([]byte(http_response))
+		nbytes, err = connect.Write(http_response)
 		if err != nil {
 			fmt.Printf("response error (%v bytes were written):\n", nbytes)
 			fmt.Print(err)
