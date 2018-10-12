@@ -15,15 +15,23 @@ import (
 )
 
 
-//variables
+// variables
 var addr_listen string
 var port_listen string
 var err error
 var nurgling_workdir string
 
+// structures
+type httpRequest struct {
+	request []string
+	header map[string]string
+	message string
+}
+
 // functions
-func parseHTTP(message_raw string) ([]string,map[string]string,string) {
+func parseHTTP(message_raw string) httpRequest {
 	// variables that will be returned
+	var parsed_request httpRequest
 	var http_request []string
 	var http_header_fields map[string]string
 	var message_body string
@@ -53,18 +61,76 @@ func parseHTTP(message_raw string) ([]string,map[string]string,string) {
 			http_header_fields[http_header_field_split[0]] = http_header_field_split[1]
 		}
 	}
-
-	return http_request,http_header_fields,message_body
+	parsed_request = httpRequest{
+		request: http_request,
+		header: http_header_fields,
+		message: message_body,
+	}
+	return parsed_request
 }
 
+func handleHTTP(http_request httpRequest) string{
+	// variables
+	var request_method string = http_request.request[0]
+	var request_resource string = http_request.request[1]
+	var resource_bytes []byte
+	var response_head string
+	var response_body string
+
+	switch request_method {
+	case "GET":
+		// GET request
+		if rune(request_resource[len(request_resource) - 1]) == '/' {
+			resource_bytes, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
+			response_body = string(resource_bytes)
+			if err != nil {
+				fmt.Println("error reading " + nurgling_workdir + request_resource + "index.html :")
+				fmt.Println(err)
+			} else {
+				fmt.Println(nurgling_workdir + request_resource + "index.html read SUCCsesfully")
+			}
+		} else {
+			resource_bytes, err = ioutil.ReadFile(nurgling_workdir + request_resource)
+			response_body = string(resource_bytes)
+			if err != nil {
+				fmt.Println("error reading " + nurgling_workdir + request_resource + " :")
+				fmt.Println(err)
+			} else {
+				fmt.Println(nurgling_workdir + request_resource + " read SUCCesfully")
+			}
+		}
+		response_head = "HTTP/1.1 200 OK\n\r\n\r"
+	case "HEAD":
+		// HEAD request
+	case "POST":
+		// POST request
+	case "PUT":
+		// PUT request
+	case "DELETE":
+		// DELETE request
+	case "TRACE":
+		// TRACE request
+	case "OPTIONS":
+		// TRACE request
+	case "CONNECT":
+		// CONNECT request
+	case "PATCH":
+		//PATCH request
+	}
+	return response_head + response_body
+}
 func main() {
+	// variables
+	var http_response string 
+	var http_request_parsed httpRequest
+
 	// default options
 	addr_listen = "0.0.0.0"
 	port_listen = "7777"
 	nurgling_workdir = "/home/karlyan/go/src/nurgling"
 	//
 
-	index, err := ioutil.ReadFile(nurgling_workdir + "/" + "index.html")
+	//index, err := ioutil.ReadFile(nurgling_workdir + "/" + "index.html")
 	if err != nil {
 		fmt.Printf("error reading index.html:\n")
 		fmt.Print(err)
@@ -83,6 +149,7 @@ func main() {
 	for {
 		//wait for connection
 		connect, err := listen.Accept()
+		//////////////////////////////FORK HERE///////////////////////////////
 		if err != nil {
 			fmt.Printf("connection error:\n")
 			fmt.Print(err)
@@ -98,11 +165,12 @@ func main() {
 		} else {
 			fmt.Printf("read %v bytes:\n", nbytes)
 			fmt.Print(string(message))
-			parseHTTP(string(message))
 		}
+
 		//respond with message
-		nbytes, err = connect.Write([]byte("HTTP/1.1 200 OK\n\n"))
-		nbytes, err = connect.Write(index)
+		http_request_parsed = parseHTTP(string(message))
+		http_response = handleHTTP(http_request_parsed)
+		nbytes, err = connect.Write([]byte(http_response))
 		if err != nil {
 			fmt.Printf("response error (%v bytes were written):\n", nbytes)
 			fmt.Print(err)
