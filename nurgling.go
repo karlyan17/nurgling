@@ -79,14 +79,16 @@ func parseHTTP(message_raw []byte) httpRequest {
 
 func handleHTTP(http_request httpRequest) []byte{
 	// variables
-	var request_method string = http_request.request[0]
-	var request_resource string = http_request.request[1]
-	var response_head []byte
-	var response_body []byte
-
-	response_head = append(response_head, []byte("Server: nurgling/0.1\r\n")...)
-
 	switch request_method {
+	 var request_method string = http_request.request[0]
+        var request_resource string = http_request.request[1]
+        var response_head []byte
+        var response_body []byte
+
+        response_head = append(response_head, []byte("Server: nurgling/0.1\r\n")...)
+
+
+
 	case "GET":
 		// GET request
 		if rune(request_resource[len(request_resource) - 1]) == '/' {
