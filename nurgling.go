@@ -1,3 +1,5 @@
+//nurgling.go
+
 // # TODO
 // 	- variables for options
 //	- config file for options
@@ -13,6 +15,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"strconv"
+	"nurgling/logging"
 )
 
 
@@ -138,16 +141,10 @@ func main() {
 	// default options
 	addr_listen = "0.0.0.0"
 	port_listen = "7777"
-	nurgling_workdir = "/home/karlyan/go/src/nurgling/www"
+	nurgling_workdir = "/home/alex/go/src/nurgling/www"
 	//
 
-	//index, err := ioutil.ReadFile(nurgling_workdir + "/" + "index.html")
-	if err != nil {
-		go fmt.Printf("error reading index.html:\n")
-		go fmt.Print(err)
-	} else {
-		go fmt.Printf("index.html read\n")
-	}
+	logging.TimeStamp()
 	//start the Listener for tcp on port 7777
 	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
 	if err != nil {
