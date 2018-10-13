@@ -26,16 +26,16 @@ var nurgling_workdir string
 type httpRequest struct {
 	request []string
 	header map[string]string
-	message string
+	message []byte
 }
 
 // functions
-func parseHTTP(message_raw string) httpRequest {
+func parseHTTP(message_raw []byte) httpRequest {
 	// variables that will be returned
 	var parsed_request httpRequest
 	var http_request []string
 	var http_header_fields map[string]string
-	var message_body string
+	var message_body []byte
 
 	// variables that are garbage
 	var message_raw_split []string
@@ -43,9 +43,9 @@ func parseHTTP(message_raw string) httpRequest {
 	var http_header_field_split []string
 
 	// split http header from message body and save body
-	message_raw_split = strings.Split(message_raw, "\r\n\r\n")
+	message_raw_split = strings.Split(string(message_raw), "\r\n\r\n")
 	if len(message_raw_split) > 1 {
-		message_body = message_raw_split[1]
+		message_body = []byte(message_raw_split[1])
 	}
 
 	// split up the header in lines
@@ -61,7 +61,9 @@ func parseHTTP(message_raw string) httpRequest {
 			http_request = strings.Split(line, " ")
 		} else {
 			http_header_field_split = strings.Split(line, ": ")
-			http_header_fields[http_header_field_split[0]] = http_header_field_split[1]
+			if len(http_header_field_split) > 1 {
+				http_header_fields[http_header_field_split[0]] = http_header_field_split[1]
+			}
 		}
 	}
 	parsed_request = httpRequest{
@@ -136,7 +138,7 @@ func main() {
 	// default options
 	addr_listen = "0.0.0.0"
 	port_listen = "7777"
-	nurgling_workdir = "/home/karlyan/go/src/nurgling"
+	nurgling_workdir = "/home/karlyan/go/src/nurgling/www"
 	//
 
 	//index, err := ioutil.ReadFile(nurgling_workdir + "/" + "index.html")
@@ -177,7 +179,7 @@ func main() {
 		}
 
 		//respond with message
-		http_request_parsed = parseHTTP(string(message))
+		http_request_parsed = parseHTTP(message)
 		http_response = handleHTTP(http_request_parsed)
 		nbytes, err = connect.Write(http_response)
 		if err != nil {
