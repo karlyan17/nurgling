@@ -147,13 +147,13 @@ func serveConnection(connect net.Conn) {
 	//read incomming request
 	message := make([]byte, 1024)
 	nbytes, err := connect.Read(message)
-	log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
+	go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
 
 	//respond with message
 	http_request_parsed = parseHTTP(message)
 	http_response = handleHTTP(http_request_parsed)
 	nbytes, err = connect.Write(http_response)
-	log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
+	go log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
 	//close connection
 	connect.Close()
 }
@@ -199,7 +199,7 @@ func main() {
 
 	//start the Listener for tcp on port 7777
 	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
-	go log.LogWrite("Opened socket on port 7777 to listen on", err)
+	log.LogWrite("Opened socket on port 7777 to listen on", err)
 
 	//begin infinite serving loop
 	for {
