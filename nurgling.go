@@ -24,6 +24,9 @@ var addr_listen string
 var port_listen string
 var err error
 var nurgling_workdir string
+var error_log string
+var message_log string
+var log logging.Log
 
 // structures
 type httpRequest struct {
@@ -94,23 +97,21 @@ func handleHTTP(http_request httpRequest) []byte{
 		if rune(request_resource[len(request_resource) - 1]) == '/' {
 			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
 			if err != nil {
-				go fmt.Println("error reading " + nurgling_workdir + request_resource + "index.html :")
-				go fmt.Println(err)
+				go log.LogWrite(fmt.Sprint("error reading " + nurgling_workdir + request_resource + "index.html :"), err)
 				response_head = append([]byte("HTTP/1.1 404 Not Found\r\n"), response_head...)
 				response_body = []byte("404 stop trying\r\n")
 			} else {
-				go fmt.Println(nurgling_workdir + request_resource + "index.html read SUCCsesfully")
+				go log.LogWrite(fmt.Sprint(nurgling_workdir + request_resource + "index.html read SUCCsesfully"), err)
 				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 			}
 		} else {
 			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource)
 			if err != nil {
-				go fmt.Println("error reading " + nurgling_workdir + request_resource + " :")
-				go fmt.Println(err)
+				go log.LogWrite(fmt.Sprint("error reading " + nurgling_workdir + request_resource + " :"), err)
 				response_head = append([]byte("HTTP/1.1 404 Not Found\r\n"), response_head...)
 				response_body = []byte("404 stop trying\r\n")
 			} else {
-				go fmt.Println(nurgling_workdir + request_resource + " read SUCCesfully")
+				go log.LogWrite(fmt.Sprint(nurgling_workdir + request_resource + " read SUCCesfully"), err)
 				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 			}
 		}
@@ -132,7 +133,6 @@ func handleHTTP(http_request httpRequest) []byte{
 		//PATCH request
 	}
 	response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
-	fmt.Println(string(response_head))
 	return append(response_head, response_body...)
 }
 func main() {
@@ -143,50 +143,38 @@ func main() {
 	// default options
 	addr_listen = "0.0.0.0"
 	port_listen = "7777"
-	nurgling_workdir = "/home/alex/go/src/nurgling/www"
+	nurgling_workdir = "/home/nurgling"
+	message_log = "/home/nurgling/message.log"
+	error_log = "/home/nurgling/error.log"
 	//
 
-	logging.TimeStamp()
+	// setup
+	log = logging.Log {
+		Log_path: message_log,
+		Err_path: error_log,
+	}
+	log.LogWrite("Logger started")
+
 	//start the Listener for tcp on port 7777
 	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
-	if err != nil {
-		go fmt.Printf("error connecting to socket:\n")
-		go fmt.Print(err)
-	} else {
-		go fmt.Printf("Opened socket on port 7777 to listen on\n")
-	}
+	go log.LogWrite("Opened socket on port 7777 to listen on", err)
+
 	//begin infinite serving loop
 	for {
 		//wait for connection
 		connect, err := listen.Accept()
+		go log.LogWrite(fmt.Sprintf("started connection to %v", connect.RemoteAddr()), err)
 		//////////////////////////////FORK HERE///////////////////////////////
-		if err != nil {
-			go fmt.Printf("connection error:\n")
-			go fmt.Print(err)
-		} else {
-			go fmt.Printf("started connection to %v\n", connect.RemoteAddr())
-		}
 		//read incomming request
 		message := make([]byte, 1024)
 		nbytes, err :=connect.Read(message)
-		if err != nil {
-			go fmt.Printf("reading error (%v bytes read):\n", nbytes)
-			go fmt.Print(err)
-		} else {
-			go fmt.Printf("read %v bytes:\n", nbytes)
-			go fmt.Print(string(message))
-		}
+		go log.LogWrite(fmt.Sprintf("read %v bytes:\n" + string(message), nbytes), err)
 
 		//respond with message
 		http_request_parsed = parseHTTP(message)
 		http_response = handleHTTP(http_request_parsed)
 		nbytes, err = connect.Write(http_response)
-		if err != nil {
-			go fmt.Printf("response error (%v bytes were written):\n", nbytes)
-			go fmt.Print(err)
-		} else {
-			go fmt.Printf("%v bytes written SUCCessfully\n", nbytes)
-		}
+		go log.LogWrite(fmt.Sprintf("%v bytes written SUCCessfully", nbytes), err)
 		//close connection
 		connect.Close()
 	}
