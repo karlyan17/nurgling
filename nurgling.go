@@ -16,6 +16,7 @@ import (
 	"strings"
 	"strconv"
 	"nurgling/logging"
+	"os"
 )
 
 
@@ -25,7 +26,9 @@ var port_listen string
 var err error
 var nurgling_workdir string
 var error_log string
+var error_log_dir string
 var message_log string
+var message_log_dir string
 var log logging.Log
 
 // structures
@@ -135,23 +138,62 @@ func handleHTTP(http_request httpRequest) []byte{
 	response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
 	return append(response_head, response_body...)
 }
-func main() {
-	// variables
+
+func serveConnection(connect net.Conn) {
+	//variables
 	var http_response []byte
 	var http_request_parsed httpRequest
+
+	//read incomming request
+	message := make([]byte, 1024)
+	nbytes, err := connect.Read(message)
+	log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
+
+	//respond with message
+	http_request_parsed = parseHTTP(message)
+	http_response = handleHTTP(http_request_parsed)
+	nbytes, err = connect.Write(http_response)
+	log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
+	//close connection
+	connect.Close()
+}
+func main() {
+	// variables
 
 	// default options
 	addr_listen = "0.0.0.0"
 	port_listen = "7777"
 	nurgling_workdir = "/home/nurgling"
-	message_log = "/home/nurgling/message.log"
-	error_log = "/home/nurgling/error.log"
+	message_log_dir = "/home/nurgling"
+	error_log_dir = "/home/nurgling"
 	//
 
 	// setup
+	message_log = message_log_dir + "/" + logging.TimeStamp() + "_message.log"
+	error_log = error_log_dir + "/" + logging.TimeStamp() + "_error.log"
 	log = logging.Log {
 		Log_path: message_log,
 		Err_path: error_log,
+	}
+	f, err := os.OpenFile(message_log, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	f.Close()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	f, err = os.OpenFile(error_log, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	f.Close()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	log.LogWrite("Logger started")
 
@@ -164,18 +206,6 @@ func main() {
 		//wait for connection
 		connect, err := listen.Accept()
 		go log.LogWrite(fmt.Sprintf("started connection to %v", connect.RemoteAddr()), err)
-		//////////////////////////////FORK HERE///////////////////////////////
-		//read incomming request
-		message := make([]byte, 1024)
-		nbytes, err :=connect.Read(message)
-		go log.LogWrite(fmt.Sprintf("read %v bytes:\n" + string(message), nbytes), err)
-
-		//respond with message
-		http_request_parsed = parseHTTP(message)
-		http_response = handleHTTP(http_request_parsed)
-		nbytes, err = connect.Write(http_response)
-		go log.LogWrite(fmt.Sprintf("%v bytes written SUCCessfully", nbytes), err)
-		//close connection
-		connect.Close()
+		go serveConnection(connect)
 	}
 }
