@@ -1,22 +1,22 @@
 //nurgling.go
 
 // # TODO
-// 	- variables for options
 //	- config file for options
 //	- command line arguments
-//	- parse HTTP requests (only deliver on GET, otherwise respond with 405)
-//	- deliver custom files from workdir
+//	- HTTPS support
+//	- webengine plugin support
 
 package main
 
 import (
 	"fmt"
-	"net"
 	"io/ioutil"
+	"net"
+	"os"
 	"strings"
 	"strconv"
 	"nurgling/logging"
-	"os"
+	"nurgling/options"
 )
 
 
@@ -158,17 +158,16 @@ func serveConnection(connect net.Conn) {
 	connect.Close()
 }
 func main() {
-	// variables
-
-	// default options
-	addr_listen = "0.0.0.0"
-	port_listen = "7777"
-	nurgling_workdir = "/home/nurgling"
-	message_log_dir = "/home/nurgling"
-	error_log_dir = "/home/nurgling"
-	//
-
 	// setup
+	opts := options.Get()
+	addr_listen = opts.Addr_listen
+	port_listen = opts.Port_listen
+	nurgling_workdir = opts.Workdir
+	message_log_dir = opts.Message_log_dir
+	error_log_dir = opts.Error_log_dir
+
+	fmt.Println("[" + logging.TimeStamp() + "]", "options parsed successfully")
+
 	message_log = message_log_dir + "/" + logging.TimeStamp() + "_message.log"
 	error_log = error_log_dir + "/" + logging.TimeStamp() + "_error.log"
 	log = logging.Log {
