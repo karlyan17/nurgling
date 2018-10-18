@@ -18,6 +18,7 @@ type options struct {
 	Error_log_dir string
 	Ssl_cert string
 	Ssl_key string
+	Cgi_path string
 }
 
 func parseConfig(path *string) options {
@@ -61,6 +62,8 @@ func parseConfig(path *string) options {
 				opts.Ssl_cert = key_value[1]
 			case "Ssl_key":
 				opts.Ssl_key = key_value[1]
+			case "Cgi_path":
+				opts.Cgi_path = key_value[1]
 			default:
 				fmt.Fprintln(os.Stderr,"ERROR: error parsing line", i, ":", line, "\n")
 		}
