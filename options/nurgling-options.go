@@ -6,46 +6,63 @@ import(
 	"io/ioutil"
 	"strings"
 	"regexp"
+	"os"
 )
 
 type options struct {
 	Addr_listen string
 	Port_listen string
+	Ssl_port_listen string
 	Workdir string
 	Message_log_dir string
 	Error_log_dir string
+	Ssl_cert string
+	Ssl_key string
 }
 
 func parseConfig(path *string) options {
 	var opts options
 	//read file
 	config_file_bytes, err := ioutil.ReadFile(*path)
-	fmt.Println(err)
+	if err != nil {
+		fmt.Fprint(os.Stderr,"ERROR:" + err.Error() + "\n")
+	} else {
+		fmt.Println("config file read successfully; parsing...")
+	}
 	config_file := string(config_file_bytes)
 
 	//delete comments
 	comment_regexp, err := regexp.Compile("#.*\n")
-	fmt.Println(err)
 	config_file = comment_regexp.ReplaceAllString(config_file, "\n")
 
 	//clean whitespaces
 	config_file = strings.Replace(config_file, " ", "", -1)
 	config_file = strings.Replace(config_file, "\t", "", -1)
-
 	config_lines := strings.Split(config_file, "\n")
-	for _,line := range(config_lines) {
+	for i,line := range(config_lines) {
+		if line == "" {
+			continue
+		}
 		key_value := strings.Split(line, "=")
 		switch key_value[0] {
 			case "Addr_listen":
 				opts.Addr_listen = key_value[1]
 			case "Port_listen":
 				opts.Port_listen = key_value[1]
+			case "Ssl_port_listen":
+				opts.Ssl_port_listen = key_value[1]
 			case "Workdir":
 				opts.Workdir = key_value[1]
 			case "Message_log_dir":
 				opts.Message_log_dir = key_value[1]
 			case "Error_log_dir":
 				opts.Error_log_dir = key_value[1]
+			case "Ssl_cert":
+				opts.Ssl_cert = key_value[1]
+			case "Ssl_key":
+				opts.Ssl_key = key_value[1]
+			default:
+				fmt.Fprintln(os.Stderr,"ERROR: error parsing line", i, ":", line, "\n")
 		}
 	}
 	fmt.Println(opts)

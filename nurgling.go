@@ -1,16 +1,17 @@
 //nurgling.go
 
 // # TODO
-//	- config file for options
 //	- command line arguments
-//	- HTTPS support
+//	- MIME types
 //	- webengine plugin support
 
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"mime"
 	"net"
 	"os"
 	"strings"
@@ -23,13 +24,15 @@ import (
 // variables
 var addr_listen string
 var port_listen string
-var err error
+var ssl_port_listen string
 var nurgling_workdir string
 var error_log string
 var error_log_dir string
 var message_log string
 var message_log_dir string
 var log logging.Log
+var ssl_cert string
+var ssl_key string
 
 // structures
 type httpRequest struct {
@@ -51,14 +54,16 @@ func parseHTTP(message_raw []byte) httpRequest {
 	var http_request_lines []string
 	var http_header_field_split []string
 
-	// split http header from message body and save body
+
+	// split http header from message body 
 	message_raw_split = strings.Split(string(message_raw), "\r\n\r\n")
+	// split up the header in lines
+	http_request_lines = strings.Split(message_raw_split[0], "\r\n")
+	// save body
 	if len(message_raw_split) > 1 {
 		message_body = []byte(message_raw_split[1])
 	}
 
-	// split up the header in lines
-	http_request_lines = strings.Split(message_raw_split[0], "\r\n")
 
 	// go through the lines and 
 	// 1) isolate the http request line
@@ -85,11 +90,16 @@ func parseHTTP(message_raw []byte) httpRequest {
 
 func handleHTTP(http_request httpRequest) []byte{
 	// variables
-	var request_method string = http_request.request[0]
-        var request_resource string = http_request.request[1]
+	var request_method string
+        var request_resource string
         var response_head []byte
         var response_body []byte
+	var err error
 
+	request_method = http_request.request[0]
+	if len(http_request.request) > 1 {
+		request_resource = http_request.request[1]
+	}
         response_head = append(response_head, []byte("Server: nurgling/0.1\r\n")...)
 
 
@@ -98,16 +108,18 @@ func handleHTTP(http_request httpRequest) []byte{
 	case "GET":
 		// GET request
 		if rune(request_resource[len(request_resource) - 1]) == '/' {
-			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
-			if err != nil {
-				go log.LogWrite(fmt.Sprint("error reading " + nurgling_workdir + request_resource + "index.html :"), err)
-				response_head = append([]byte("HTTP/1.1 404 Not Found\r\n"), response_head...)
-				response_body = []byte("404 stop trying\r\n")
-			} else {
-				go log.LogWrite(fmt.Sprint(nurgling_workdir + request_resource + "index.html read SUCCsesfully"), err)
-				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
-			}
-		} else {
+			request_resource = request_resource + "index.html"
+		}
+//			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource + "index.html")
+//			if err != nil {
+//				go log.LogWrite(fmt.Sprint("error reading " + nurgling_workdir + request_resource + "index.html :"), err)
+//				response_head = append([]byte("HTTP/1.1 404 Not Found\r\n"), response_head...)
+//				response_body = []byte("404 stop trying\r\n")
+//			} else {
+//				go log.LogWrite(fmt.Sprint(nurgling_workdir + request_resource + "index.html read SUCCsesfully"), err)
+//				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
+//			}
+//		} else {
 			response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource)
 			if err != nil {
 				go log.LogWrite(fmt.Sprint("error reading " + nurgling_workdir + request_resource + " :"), err)
@@ -115,9 +127,14 @@ func handleHTTP(http_request httpRequest) []byte{
 				response_body = []byte("404 stop trying\r\n")
 			} else {
 				go log.LogWrite(fmt.Sprint(nurgling_workdir + request_resource + " read SUCCesfully"), err)
+				request_resource_sep := strings.Split(request_resource, ".")
+				request_resource_extension := mime.TypeByExtension("." + request_resource_sep[len(request_resource_sep) - 1 ])
+				fmt.Println(request_resource_sep)
+				fmt.Println(request_resource_extension)
+				response_head = append(response_head, []byte("content-type: " + request_resource_extension + "\r\n")...)
 				response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 			}
-		}
+//		}
 	case "HEAD":
 		// HEAD request
 	case "POST":
@@ -136,35 +153,67 @@ func handleHTTP(http_request httpRequest) []byte{
 		//PATCH request
 	}
 	response_head = append(response_head, []byte("Content-Length: " + strconv.Itoa(len(response_body)) + "\r\n\r\n")...)
+	log.LogWrite(string(response_head))
 	return append(response_head, response_body...)
 }
 
 func serveConnection(connect net.Conn) {
-	//variables
-	var http_response []byte
-	var http_request_parsed httpRequest
+	for{
+		//variables
+		var http_response []byte
+		var http_request_parsed httpRequest
 
-	//read incomming request
-	message := make([]byte, 1024)
-	nbytes, err := connect.Read(message)
-	go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
+		//read incomming request
+		message := make([]byte, 1024)
+		//var message []byte
+		nbytes, err := connect.Read(message)
+		go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
 
-	//respond with message
-	http_request_parsed = parseHTTP(message)
-	http_response = handleHTTP(http_request_parsed)
-	nbytes, err = connect.Write(http_response)
-	go log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
-	//close connection
-	connect.Close()
+		//respond with message
+
+		if nbytes > 0 {
+			http_request_parsed = parseHTTP(message)
+			http_response = handleHTTP(http_request_parsed)
+			nbytes, err = connect.Write(http_response)
+			go log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
+		} else {
+			break
+		}
+	}
+	log.LogWrite(fmt.Sprintf("Connection to %v closed by client", connect.RemoteAddr()))
 }
+
+func listenHTTP(listen net.Listener, done chan int) {
+	log.LogWrite("HTTP listener started")
+	for {
+		connect, err := listen.Accept()
+		go log.LogWrite(fmt.Sprintf("started HTTP connection to %v", connect.RemoteAddr()), err)
+		go serveConnection(connect)
+	}
+	done <- 0
+}
+
+func listenHTTPS(listen net.Listener, done chan int) {
+	log.LogWrite("HTTPS listener started")
+	for {
+		connect, err := listen.Accept()
+		go log.LogWrite(fmt.Sprintf("started HTTPS connection to %v", connect.RemoteAddr()), err)
+		go serveConnection(connect)
+	}
+	done <- 0
+}
+
 func main() {
 	// setup
 	opts := options.Get()
 	addr_listen = opts.Addr_listen
 	port_listen = opts.Port_listen
+	ssl_port_listen = opts.Ssl_port_listen
 	nurgling_workdir = opts.Workdir
 	message_log_dir = opts.Message_log_dir
 	error_log_dir = opts.Error_log_dir
+	ssl_cert = opts.Ssl_cert
+	ssl_key = opts.Ssl_key
 
 	fmt.Println("[" + logging.TimeStamp() + "]", "options parsed successfully")
 
@@ -200,11 +249,23 @@ func main() {
 	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
 	log.LogWrite("Opened socket on port 7777 to listen on", err)
 
+	// start TLS Listener 
+	ssl_cert_key,err := tls.LoadX509KeyPair(ssl_cert, ssl_key)
+	log.LogWrite("Loading certificate and key", err)
+	tls_config := &tls.Config{Certificates: []tls.Certificate{ssl_cert_key}}
+	listen_tls,err := tls.Listen("tcp", addr_listen + ":" + ssl_port_listen, tls_config)
+
 	//begin infinite serving loop
+	chan_http := make(chan int)
+	chan_https := make(chan int)
+	go listenHTTP(listen, chan_http)
+	go listenHTTPS(listen_tls, chan_https)
+	<-chan_http
+	<-chan_https
 	for {
 		//wait for connection
-		connect, err := listen.Accept()
-		go log.LogWrite(fmt.Sprintf("started connection to %v", connect.RemoteAddr()), err)
-		go serveConnection(connect)
+		//connect, err := listen.Accept()
+		//go log.LogWrite(fmt.Sprintf("started connection to %v", connect.RemoteAddr()), err)
+		//go serveConnection(connect)
 	}
 }
