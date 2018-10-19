@@ -19,6 +19,9 @@ type options struct {
 	Ssl_cert string
 	Ssl_key string
 	Cgi_path string
+	Cgi_alias string
+	Server_admin string
+	Server_name string
 }
 
 func parseConfig(path *string) options {
@@ -64,6 +67,12 @@ func parseConfig(path *string) options {
 				opts.Ssl_key = key_value[1]
 			case "Cgi_path":
 				opts.Cgi_path = key_value[1]
+			case "Cgi_alias":
+				opts.Cgi_alias = key_value[1]
+			case "Server_admin":
+				opts.Server_admin = key_value[1]
+			case "Server_name":
+				opts.Server_name = key_value[1]
 			default:
 				fmt.Fprintln(os.Stderr,"ERROR: error parsing line", i, ":", line, "\n")
 		}

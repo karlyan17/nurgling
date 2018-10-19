@@ -35,8 +35,11 @@ var message_log_dir string = "/home/nurgling/log"
 var log logging.Log
 var ssl_cert string = "/home/nurgling/cert/server.crt"
 var ssl_key string = "/home/nurgling/key/server.key"
-var server_name string = "nurgling/0.1"
+var server_name string = "www.example.com"
+var server_software string = "nurgling/0.1"
 var cgi_path string = "/home/nurgling/www/cgi"
+var cgi_alias string = "/cgi"
+var server_admin string = "nobody@example.com"
 
 // structures
 type httpRequest struct {
@@ -100,7 +103,7 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 	var response_body []byte
 	var err error
 
-        response_head = append(response_head, []byte("Server: " + server_name + "\r\n")...)
+        response_head = append(response_head, []byte("Server: " + server_software + "\r\n")...)
 
 	if len(http_request.request) > 1 {
 		request_method = http_request.request[0]
@@ -111,12 +114,70 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 		response_body = []byte("400 bad request\r\n")
 		return append(response_head, response_body...)
 	}
-	if match,_ := regexp.MatchString("^" + cgi_path, nurgling_workdir + request_resource); match {
+	if match,_ := regexp.MatchString("^" + cgi_alias, request_resource); match {
 		go log.LogWrite("CGI requested")
-		cmd := exec.Command(cgi_path +"/" + "test.sh")
-		out,_ := cmd.Output()
+		var query_string string
+		var path_info string
+
+		// starting with request_resource = "/cgi/script.sh/additional/path?query=1"
+		query_split := strings.SplitN(request_resource, "?", 2)
+		// now query_split = {"/cgi/script.sh/additional/path","query=1"}
+		if len(query_split) == 2 {
+			query_string = query_split[1]
+			//if a query exists query_string = "query=1"
+		}
+		cgi_path_stripped := strings.SplitN(query_split[0], cgi_alias, 2)[1]
+		// from query_split[0] = "/cgi/script.sh/additional/path"
+		// get cgi_path_stripped = "/script.sh/additional/path"
+		script_name_split := strings.SplitN(cgi_path_stripped, "/", 3)
+		// now script_name_split = {"", "script.sh", "additional/path" }
+		script_name := cgi_alias + "/" + script_name_split[1]
+		// now script_name = "/cgi/script.sh"
+		script_path := cgi_path + "/" + script_name_split[1]
+		if len(script_name_split) == 3 {
+			path_info = "/" + script_name_split[2]
+			// if an additional path exists path_info = "/additional/path"
+		}
+		remote_conn := strings.Split(fmt.Sprint(connect.RemoteAddr()), ":")
+		cgi_env := []string{
+				"GATEWAY_INTERFACE=CGI/1.1",
+				"DOCUMENT_ROOT=" + nurgling_workdir,
+				"HTTP_COOKIE=",
+				"HTTP_HOST=" + http_request.header["Host"],
+				"HTTP_REFERER=" + http_request.header["Referer"],
+				"HTTP_USER_AGENT=" + http_request.header["User-Agent"],
+				"HTTP_CONNECTION=" + http_request.header["Connection"],
+				//"PATH=",
+				"QUERY_STRING=" + query_string,
+				"REMOTE_ADDR=" + remote_conn[0],
+				"REMOTE_HOST=" + remote_conn[0],
+				"REMOTE_PORT=" + remote_conn[1],
+				"REQUEST_METHOD=" + request_method,
+				"REQUEST_URI=" + request_resource,
+				"SCRIPT_FILENAME=" + script_path,
+				"SCRIPT_NAME=" + script_name,
+				"PATH_INFO=" + path_info,
+				"SERVER_ADMIN=" + server_admin,
+				"SERVER_NAME=" + server_name,
+				"SERVER_SOFTWARE=" + server_software,
+				}
+		if is_https {
+			cgi_env = append(cgi_env, []string{
+							"HTTPS=on",
+							"SERVER_PORT=" + ssl_port_listen,
+							}...)
+		} else{
+			cgi_env = append(cgi_env, []string{
+							"HTTPS=",
+							"SERVER_PORT=" + port_listen,
+							}...)
+		}
+		fmt.Println("CGI ENV:", cgi_env)
+		cmd := exec.Command(script_path)
+		cmd.Env = cgi_env
+		out,err := cmd.Output()
+		log.LogWrite("CGI request processed",err)
 		response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
-		fmt.Println(string(append(response_head, out...)))
 		return append(response_head, out...)
 	}
 	switch request_method {
@@ -240,6 +301,8 @@ func main() {
 	ssl_cert = opts.Ssl_cert
 	ssl_key = opts.Ssl_key
 	cgi_path = opts.Cgi_path
+	cgi_alias = opts.Cgi_alias
+	server_admin = opts.Server_admin
 
 	fmt.Println("[" + logging.TimeStamp() + "]", "options parsed successfully")
 
