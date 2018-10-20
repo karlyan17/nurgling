@@ -20,6 +20,7 @@ import (
 	"nurgling/logging"
 	"nurgling/options"
 	"regexp"
+	"time"
 )
 
 
@@ -197,7 +198,7 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 			request_resource_extension := mime.TypeByExtension("." + request_resource_sep[len(request_resource_sep) - 1 ])
 			fmt.Println(request_resource_sep)
 			fmt.Println(request_resource_extension)
-			response_head = append(response_head, []byte("content-type: " + request_resource_extension + "\r\n")...)
+			response_head = append(response_head, []byte("Content-Type: " + request_resource_extension + "\r\n")...)
 			response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 		}
 	case "HEAD":
@@ -222,27 +223,6 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 	return append(response_head, response_body...)
 }
 
-func handleCGI(connect net.Conn, http_request httpRequest, is_https bool) {
-	remote_conn := strings.Split(fmt.Sprint(connect.RemoteAddr()), ":")
-	fmt.Println("DOCUMENT_ROOT", nurgling_workdir)
-	fmt.Println("HTTP_COOKIE")
-	fmt.Println("HTTP_HOST", http_request.header["Host"])
-	fmt.Println("HTTP_REFERER", http_request.header["Referer"])
-	fmt.Println("HTTP_USER_AGENT", http_request.header["User-Agent"])
-	if is_https {
-		fmt.Println("HTTPS", "on")
-	} else {
-		fmt.Println("HTTPS")
-	}
-	fmt.Println("PATH")
-	fmt.Println("QUERY_STRING")
-	fmt.Println("REMOTE_ADDR", remote_conn[0])
-	fmt.Println("REMOTE_HOST", remote_conn[0])
-	fmt.Println("REMOTE_PORT", remote_conn[1])
-	fmt.Println("SERVER_SOFTWARE", server_name )
-
-}
-
 func serveConnection(connect net.Conn, is_https bool) {
 	for{
 		//variables
@@ -253,26 +233,27 @@ func serveConnection(connect net.Conn, is_https bool) {
 		message := make([]byte, 1024)
 		//var message []byte
 		nbytes, err := connect.Read(message)
-		go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
 
 		//respond with message
-
-		if nbytes > 0 {
+		if err == nil {
+		go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
 			http_request_parsed = parseHTTP(message)
 			http_response = handleHTTP(http_request_parsed, connect, is_https)
 			nbytes, err = connect.Write(http_response)
+			connect.SetDeadline(time.Now().Add(5 * time.Minute))
 			go log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
 		} else {
+			log.LogWrite(fmt.Sprintf("Connection to %v closed  with " + fmt.Sprint(err), connect.RemoteAddr()))
 			break
 		}
 	}
-	log.LogWrite(fmt.Sprintf("Connection to %v closed by client", connect.RemoteAddr()))
 }
 
 func listenHTTP(listen net.Listener, done chan int) {
 	log.LogWrite("HTTP listener started")
 	for {
 		connect, err := listen.Accept()
+		connect.SetDeadline(time.Now().Add(5 * time.Minute))
 		go log.LogWrite(fmt.Sprintf("started HTTP connection to %v", connect.RemoteAddr()), err)
 		go serveConnection(connect, false)
 	}
@@ -283,6 +264,7 @@ func listenHTTPS(listen net.Listener, done chan int) {
 	log.LogWrite("HTTPS listener started")
 	for {
 		connect, err := listen.Accept()
+		connect.SetDeadline(time.Now().Add(5 * time.Minute))
 		go log.LogWrite(fmt.Sprintf("started HTTPS connection to %v", connect.RemoteAddr()), err)
 		go serveConnection(connect, true)
 	}
@@ -303,6 +285,7 @@ func main() {
 	cgi_path = opts.Cgi_path
 	cgi_alias = opts.Cgi_alias
 	server_admin = opts.Server_admin
+	server_name = opts.Server_name
 
 	fmt.Println("[" + logging.TimeStamp() + "]", "options parsed successfully")
 
