@@ -21,6 +21,7 @@ import (
 	"nurgling/options"
 	"regexp"
 	"time"
+	"bytes"
 )
 
 
@@ -174,9 +175,11 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 							}...)
 		}
 		fmt.Println("CGI ENV:", cgi_env)
-		cmd := exec.Command(script_path)
+		fmt.Println(">>>>>>", len(http_request.message))
+		cmd := exec.Command(script_path, string(http_request.message))
 		cmd.Env = cgi_env
 		out,err := cmd.Output()
+		//fmt.Println(string(out))
 		log.LogWrite("CGI request processed",err)
 		response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 		return append(response_head, out...)
@@ -196,8 +199,6 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 			go log.LogWrite(fmt.Sprint(nurgling_workdir + request_resource + " read SUCCesfully"), err)
 			request_resource_sep := strings.Split(request_resource, ".")
 			request_resource_extension := mime.TypeByExtension("." + request_resource_sep[len(request_resource_sep) - 1 ])
-			fmt.Println(request_resource_sep)
-			fmt.Println(request_resource_extension)
 			response_head = append(response_head, []byte("Content-Type: " + request_resource_extension + "\r\n")...)
 			response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
 		}
@@ -228,18 +229,35 @@ func serveConnection(connect net.Conn, is_https bool) {
 		//variables
 		var http_response []byte
 		var http_request_parsed httpRequest
+		var message []byte
+		var err error
 
 		//read incomming request
-		message := make([]byte, 1024)
+		buff := make([]byte, 1)
 		//var message []byte
-		nbytes, err := connect.Read(message)
-
+		for {
+			_, err = connect.Read(buff)
+			message = append(message, buff...)
+			if err != nil {
+				go log.LogWrite("error while reading http request", err)
+				break
+			}
+			if l := len(message); l >= 4 && bytes.Equal(message[(l-4):(l)], []byte("\r\n\r\n")) {
+				break
+			}
+		}
 		//respond with message
 		if err == nil {
-		go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), nbytes), err)
+		go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(message), connect.RemoteAddr(), len(message)), err)
 			http_request_parsed = parseHTTP(message)
+			if cl := http_request_parsed.header["Content-Length"]; cl != "" {
+				m_len,_ := strconv.Atoi(cl)
+				http_request_parsed.message = make([]byte, m_len)
+				nbytes, err := connect.Read(http_request_parsed.message)
+				go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(http_request_parsed.message), connect.RemoteAddr(), nbytes), err)
+			}
 			http_response = handleHTTP(http_request_parsed, connect, is_https)
-			nbytes, err = connect.Write(http_response)
+			nbytes, err := connect.Write(http_response)
 			connect.SetDeadline(time.Now().Add(5 * time.Minute))
 			go log.LogWrite(fmt.Sprintf("%v: %v bytes written SUCCessfully", connect.RemoteAddr(), nbytes), err)
 		} else {
