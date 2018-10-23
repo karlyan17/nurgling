@@ -175,7 +175,6 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 							}...)
 		}
 		fmt.Println("CGI ENV:", cgi_env)
-		fmt.Println(">>>>>>", len(http_request.message))
 		cmd := exec.Command(script_path, string(http_request.message))
 		cmd.Env = cgi_env
 		out,err := cmd.Output()
@@ -254,7 +253,7 @@ func serveConnection(connect net.Conn, is_https bool) {
 				m_len,_ := strconv.Atoi(cl)
 				http_request_parsed.message = make([]byte, m_len)
 				nbytes, err := connect.Read(http_request_parsed.message)
-				go log.LogWrite(fmt.Sprintf("%v: read %v bytes:\n" + string(http_request_parsed.message), connect.RemoteAddr(), nbytes), err)
+				go log.LogWrite(fmt.Sprintf("%v: read %v bytes%v:\n" + string(http_request_parsed.message), connect.RemoteAddr(), nbytes, http_request_parsed.message), err)
 			}
 			http_response = handleHTTP(http_request_parsed, connect, is_https)
 			nbytes, err := connect.Write(http_response)
