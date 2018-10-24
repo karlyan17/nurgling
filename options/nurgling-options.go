@@ -22,6 +22,8 @@ type options struct {
 	Cgi_alias string
 	Server_admin string
 	Server_name string
+	Default_page string
+	Default_cgi string
 }
 
 func parseConfig(path *string) options {
@@ -73,6 +75,10 @@ func parseConfig(path *string) options {
 				opts.Server_admin = key_value[1]
 			case "Server_name":
 				opts.Server_name = key_value[1]
+			case "Default_page":
+				opts.Default_page = key_value[1]
+			case "Default_cgi":
+				opts.Default_cgi = key_value[1]
 			default:
 				fmt.Fprintln(os.Stderr,"ERROR: error parsing line", i, ":", line, "\n")
 		}

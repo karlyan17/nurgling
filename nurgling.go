@@ -42,6 +42,8 @@ var server_software string = "nurgling/0.1"
 var cgi_path string = "/home/nurgling/www/cgi"
 var cgi_alias string = "/cgi"
 var server_admin string = "nobody@example.com"
+var default_page string = "index.html"
+var default_cgi string = "spr"
 
 // structures
 type httpRequest struct {
@@ -120,6 +122,8 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 		go log.LogWrite("CGI requested")
 		var query_string string
 		var path_info string
+		var script_name string
+		var script_path string
 
 		// starting with request_resource = "/cgi/script.sh/additional/path?query=1"
 		query_split := strings.SplitN(request_resource, "?", 2)
@@ -133,9 +137,17 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 		// get cgi_path_stripped = "/script.sh/additional/path"
 		script_name_split := strings.SplitN(cgi_path_stripped, "/", 3)
 		// now script_name_split = {"", "script.sh", "additional/path" }
-		script_name := cgi_alias + "/" + script_name_split[1]
+		if len(script_name_split) > 1 {
+			script_name = cgi_alias + "/" + script_name_split[1]
+		} else {
+			script_name = cgi_alias
+		}
 		// now script_name = "/cgi/script.sh"
-		script_path := cgi_path + "/" + script_name_split[1]
+		if len(script_name_split) > 1 {
+			script_path = cgi_path + "/" + script_name_split[1]
+		} else {
+			script_path = cgi_path
+		}
 		if len(script_name_split) == 3 {
 			path_info = "/" + script_name_split[2]
 			// if an additional path exists path_info = "/additional/path"
@@ -175,7 +187,13 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 							}...)
 		}
 		fmt.Println("CGI ENV:", cgi_env)
-		cmd := exec.Command(script_path, string(http_request.message))
+		script_path_info,_ := os.Stat(script_path)
+		var cmd *exec.Cmd
+		if script_path_info != nil && script_path_info.Mode().IsDir() {
+			cmd = exec.Command(script_path + "/" + default_cgi, string(http_request.message))
+		} else {
+			cmd = exec.Command(script_path, string(http_request.message))
+		}
 		cmd.Env = cgi_env
 		out,err := cmd.Output()
 		//fmt.Println(string(out))
@@ -186,8 +204,12 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 	switch request_method {
 	case "GET":
 		// GET request
-		if rune(request_resource[len(request_resource) - 1]) == '/' {
-			request_resource = request_resource + "index.html"
+		//if rune(request_resource[len(request_resource) - 1]) == '/' {
+		//	request_resource = request_resource + "index.html"
+		//}
+		resource_file_info,_ := os.Stat(nurgling_workdir + request_resource)
+		if resource_file_info != nil && resource_file_info.Mode().IsDir() {
+			request_resource = request_resource + default_page
 		}
 		response_body, err = ioutil.ReadFile(nurgling_workdir + request_resource)
 		if err != nil {
@@ -253,7 +275,7 @@ func serveConnection(connect net.Conn, is_https bool) {
 				m_len,_ := strconv.Atoi(cl)
 				http_request_parsed.message = make([]byte, m_len)
 				nbytes, err := connect.Read(http_request_parsed.message)
-				go log.LogWrite(fmt.Sprintf("%v: read %v bytes%v:\n" + string(http_request_parsed.message), connect.RemoteAddr(), nbytes, http_request_parsed.message), err)
+				go log.LogWrite(fmt.Sprintf("%v: read %v bytes%v\n", connect.RemoteAddr(), nbytes, http_request_parsed.message), err)
 			}
 			http_response = handleHTTP(http_request_parsed, connect, is_https)
 			nbytes, err := connect.Write(http_response)
@@ -303,6 +325,8 @@ func main() {
 	cgi_alias = opts.Cgi_alias
 	server_admin = opts.Server_admin
 	server_name = opts.Server_name
+	default_page = opts.Default_page
+	default_cgi = opts.Default_cgi
 
 	fmt.Println("[" + logging.TimeStamp() + "]", "options parsed successfully")
 
