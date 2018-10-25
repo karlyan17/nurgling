@@ -1,9 +1,5 @@
 //nurgling.go
 
-// # TODO
-//	- command line arguments
-//	- MIME types
-//	- webengine plugin support
 
 package main
 
@@ -15,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"strings"
 	"strconv"
 	"nurgling/logging"
@@ -22,7 +19,12 @@ import (
 	"regexp"
 	"time"
 	"bytes"
+	"syscall"
 )
+//#include <stdio.h>
+//#include <sys/types.h>
+//#include <unistd.h>
+import "C"
 
 
 // variables
@@ -44,6 +46,7 @@ var cgi_alias string = "/cgi"
 var server_admin string = "nobody@example.com"
 var default_page string = "index.html"
 var default_cgi string = "spr"
+var www_user string = "nurgling"
 
 // structures
 type httpRequest struct {
@@ -246,6 +249,33 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 }
 
 func serveConnection(connect net.Conn, is_https bool) {
+/*	if syscall.Getuid() == 0 {
+		log.LogWrite("Running as root. Dropping priveleges to user: " + www_user)
+		user, err := user.Lookup(www_user)
+		if err != nil {
+			log.LogWrite("user " + www_user + " not found, exiting:", err)
+			os.Exit(1)
+		}
+		uid,err := strconv.Atoi(user.Uid)
+		if err != nil {
+			log.LogWrite("error in UID:", err)
+			os.Exit(1)
+		}
+		gid,err := strconv.Atoi(user.Gid)
+		if err != nil {
+			log.LogWrite("error in GID:", err)
+			os.Exit(1)
+		}
+		_, err = C.setgid(C.__gid_t(gid))
+		if err != nil {
+			log.LogWrite("Unable to set GID due to error:", err)
+		}
+		_, err = C.setuid(C.__uid_t(uid))
+		if err != nil {
+			log.LogWrite("Unable to set UID due to error:", err)
+		}
+	}
+*/
 	for{
 		//variables
 		var http_response []byte
@@ -327,6 +357,7 @@ func main() {
 	server_name = opts.Server_name
 	default_page = opts.Default_page
 	default_cgi = opts.Default_cgi
+	www_user = opts.Www_user
 
 	fmt.Println("[" + logging.TimeStamp() + "]", "options parsed successfully")
 
@@ -356,18 +387,58 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	log = logging.Log {
+		Log_path: message_log,
+		Err_path: error_log,
+	}
 	log.LogWrite("Logger started")
 
 	//start the Listener for tcp on port 7777
 	listen, err := net.Listen("tcp", addr_listen + ":" + port_listen)
-	log.LogWrite("Opened socket on port 7777 to listen on", err)
+	log.LogWrite("Opened socket on port " + port_listen + " to listen on", err)
 
 	// start TLS Listener 
 	ssl_cert_key,err := tls.LoadX509KeyPair(ssl_cert, ssl_key)
 	log.LogWrite("Loading certificate and key", err)
 	tls_config := &tls.Config{Certificates: []tls.Certificate{ssl_cert_key}}
 	listen_tls,err := tls.Listen("tcp", addr_listen + ":" + ssl_port_listen, tls_config)
-
+	log.LogWrite("Opened socket on port " + ssl_port_listen + " to listen on", err)
+	if syscall.Getuid() == 0 {
+		log.LogWrite("Running as root. Dropping priveleges to user: " + www_user)
+		user, err := user.Lookup(www_user)
+		if err != nil {
+			log.LogWrite("user " + www_user + " not found, exiting:", err)
+			os.Exit(1)
+		}
+		uid,err := strconv.Atoi(user.Uid)
+		if err != nil {
+			log.LogWrite("error in UID:", err)
+			os.Exit(1)
+		}
+		gid,err := strconv.Atoi(user.Gid)
+		if err != nil {
+			log.LogWrite("error in GID:", err)
+			os.Exit(1)
+		}
+		err = os.Chown(message_log, uid, gid)
+		if err != nil {
+			log.LogWrite("error giving message_log to " + www_user + ":", err)
+			os.Exit(1)
+		}
+		err = os.Chown(error_log, uid, gid)
+		if err != nil {
+			log.LogWrite("error giving error_log to " + www_user + ":", err)
+			os.Exit(1)
+		}
+		_, err = C.setgid(C.__gid_t(gid))
+		if err != nil {
+			log.LogWrite("Unable to set GID due to error:", err)
+		}
+		_, err = C.setuid(C.__uid_t(uid))
+		if err != nil {
+			log.LogWrite("Unable to set UID due to error:", err)
+		}
+	}
 	//begin infinite serving loop
 	chan_http := make(chan int)
 	chan_https := make(chan int)
