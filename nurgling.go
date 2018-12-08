@@ -200,8 +200,10 @@ func handleHTTP(http_request httpRequest, connect net.Conn, is_https bool) []byt
 		cmd.Env = cgi_env
 		out,err := cmd.Output()
 		//fmt.Println(string(out))
+		lenOut := fmt.Sprintf("Content-Type: text/html; charset=utf-8\r\nContent-Length: %v\r\n\r\n", len(out))
 		log.LogWrite("CGI request processed",err)
 		response_head = append([]byte("HTTP/1.1 200 OK\r\n"), response_head...)
+		response_head = append(response_head, []byte(lenOut)...)
 		return append(response_head, out...)
 	}
 	switch request_method {
